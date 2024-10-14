@@ -4,37 +4,34 @@ loadstring(game:HttpGet("https://pastebin.com/raw/Dffn96Gz"))()
 
 local TweenService = game:GetService("TweenService")
 
-
-
 --prepare the script
 local flyspeed = getgenv().FlySpeed
 
 function shop(min, max)
-local goofyahhvalue = math.random(min, max)
-local Player = game.Players.LocalPlayer    
-local Http = game:GetService("HttpService")
-local TPS = game:GetService("TeleportService")
-local Api = "https://games.roblox.com/v1/games/"
+    local goofyahhvalue = math.random(min, max)
+    local Player = game.Players.LocalPlayer    
+    local Http = game:GetService("HttpService")
+    local TPS = game:GetService("TeleportService")
+    local Api = "https://games.roblox.com/v1/games/"
 
-local _place,_id = game.PlaceId, game.JobId
-local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
-function ListServers(cursor)
-local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
-return Http:JSONDecode(Raw)
-end
+    local _place,_id = game.PlaceId, game.JobId
+    local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
+    function ListServers(cursor)
+        local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
+        return Http:JSONDecode(Raw)
+    end
 
-local Next; repeat
-task.wait()
-local Servers = ListServers(Next)
-for i,v in next, Servers.data do
-if v.playing < goofyahhvalue and v.id ~= _id then
-local s,r = pcall(TPS.TeleportToPlaceInstance,TPS,_place,v.id,Player)
-if s then task.wait(5) break end
-end
-end
-
-Next = Servers.nextPageCursor
-until not Next
+    local Next; repeat
+        task.wait()
+        local Servers = ListServers(Next)
+        for i,v in next, Servers.data do
+            if v.playing < goofyahhvalue and v.id ~= _id then
+                local s,r = pcall(TPS.TeleportToPlaceInstance,TPS,_place,v.id,Player)
+                if s then task.wait(5) break end
+            end
+        end
+        Next = Servers.nextPageCursor
+    until not Next
 end
 
 getgenv().shop = shop
@@ -102,34 +99,30 @@ local MiniRobberies = {
 local function get_closest_small_robbery()
     local closest_robbery = {}
     for i, v in next, workspace.ObjectSelection:GetChildren() do
-    if not table.find(MiniRobberies, v.Name) then continue end
-    if v:FindFirstChild("Nope") then continue end
-    
-    local function get_model_pos(model)
-        return model:GetPivot().Position
-    end
-    
-    if #closest_robbery == 0 then --nothing in table so put the first thing
-        closest_robbery[1] = v
-        closest_robbery[2] = get_model_pos(v)
-        closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-        --print(get_model_pos(v))
-    elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
-        closest_robbery[1] = v
-        closest_robbery[2] = get_model_pos(v)
-        closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-    end
-    
-    --v:FireServer()
-    --table.foreach(closest_robbery, print)
+        if not table.find(MiniRobberies, v.Name) then continue end
+        if v:FindFirstChild("Nope") then continue end
+        
+        local function get_model_pos(model)
+            return model:GetPivot().Position
+        end
+        
+        if #closest_robbery == 0 then --nothing in table so put the first thing
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
+        elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
+        end
     end
     return closest_robbery
-    end
-    
-    local function get_event(v)
+end
+
+local function get_event(v)
     for i, v in next, v:GetDescendants() do
-    if not v:IsA("RemoteEvent") then continue end
-    return v
+        if not v:IsA("RemoteEvent") then continue end
+        return v
     end
 end
 
@@ -138,14 +131,11 @@ repeat
     
     if closest_robbery[1] ~= nil then
         local closest_robbery_pos = closest_robbery[2]
-        
-        --table.foreach(closest_robbery, print)
-        
         local evento = get_event(closest_robbery[1])
         tweenTp(closest_robbery_pos.x, closest_robbery_pos.y, closest_robbery_pos.z, flyspeed)
-if evento ~= nil and evento.Parent ~= nil then
-        evento:FireServer()
-end
+        if evento ~= nil and evento.Parent ~= nil then
+            evento:FireServer()
+        end
     end
     task.wait(0.05)
 until closest_robbery[1] == nil
@@ -154,3 +144,10 @@ task.wait(0.2)
 
 shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 
+-- Server hopper modified to hop every 5 seconds
+task.spawn(function()
+    while true do  -- Create an infinite loop to hop servers every 5 seconds
+        task.wait(5)  -- Wait for 5 seconds
+        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)  -- Call the server hop function
+    end
+end)
