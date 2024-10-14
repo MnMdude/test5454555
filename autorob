@@ -1,165 +1,154 @@
 repeat task.wait() until game:IsLoaded()
 
-loadstring(game:HttpGet("https://pastebin.com/raw/Dffn96Gz"))()
-
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Player = game.Players.LocalPlayer
 
-local flyspeed = getgenv().FlySpeed
+local flyspeed = getgenv().FlySpeed or 50  -- Default flyspeed if not set
+local retryLimit = 3  -- Limit retries for server hop
+local retryCount = 0
 
-function shop(min, max)
-    local goofyahhvalue = math.random(min, max)
-    local Player = game.Players.LocalPlayer    
-    local Http = game:GetService("HttpService")
-    local TPS = game:GetService("TeleportService")
-    local Api = "https://games.roblox.com/v1/games/"
+-- Function to retrieve the list of available servers
+local function getServerList(cursor)
+    local placeId = game.PlaceId
+    local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
+    if cursor then apiUrl = apiUrl .. "&cursor=" .. cursor end
 
-    local _place,_id = game.PlaceId, game.JobId
-    local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
-    
-    -- Retry logic for server hop
-    local retryLimit = 3
-    local retryCount = 0
-    
-    function ListServers(cursor)
-        local success, Raw = pcall(function()
-            return game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
-        end)
-        if success then
-            return Http:JSONDecode(Raw)
-        else
-            return nil
-        end
+    local success, response = pcall(function()
+        return game:HttpGet(apiUrl)
+    end)
+
+    if success then
+        local decodedResponse = HttpService:JSONDecode(response)
+        return decodedResponse
+    else
+        warn("Failed to retrieve server list: " .. response)
+        return nil
     end
+end
 
-    local Next
+-- Server hopping function with retry logic
+local function serverHop(minPlayers, maxPlayers)
+    local placeId, jobId = game.PlaceId, game.JobId
+    local nextCursor = nil
+
     repeat
-        task.wait(1)  -- Wait before fetching server list
-        local Servers = ListServers(Next)
-        
-        if Servers == nil then
-            warn("Failed to get server list. Retrying...")
+        local servers = getServerList(nextCursor)
+        if not servers then
             retryCount = retryCount + 1
             if retryCount >= retryLimit then
-                warn("Max retries reached. Stopping server hop.")
-                return  -- Stop if we reach the retry limit
+                warn("Max retries reached. Unable to hop servers.")
+                return
             end
-            continue
-        end
-
-        for i, v in next, Servers.data do
-            if v.playing < goofyahhvalue and v.id ~= _id then
-                local success, result = pcall(TPS.TeleportToPlaceInstance, TPS, _place, v.id, Player)
-                if success then
-                    task.wait(5)
-                    return  -- Stop after successfully hopping
-                else
-                    warn("Failed to teleport to server. Retrying...")
+            task.wait(3)  -- Wait before retrying
+        else
+            for _, server in pairs(servers.data) do
+                if server.playing >= minPlayers and server.playing <= maxPlayers and server.id ~= jobId then
+                    local success, result = pcall(TeleportService.TeleportToPlaceInstance, TeleportService, placeId, server.id, Player)
+                    if success then
+                        return  -- Successful teleport, exit function
+                    else
+                        warn("Teleport failed: " .. result)
+                    end
                 end
             end
+            nextCursor = servers.nextPageCursor
         end
-        
-        Next = Servers.nextPageCursor
-    until not Next
+    until not nextCursor
 end
 
-getgenv().shop = shop
+-- Function to handle small robberies
+local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
 
-workspace:WaitForChild("Ignore")
-workspace:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
-workspace:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
-task.wait(0.5)
-for i, v in next, workspace.Ignore.WorldObjects:GetChildren() do
-    if v.Name == "Lasers" then
-        v:Destroy()
+local function findClosestRobbery()
+    local closestRobbery, closestDistance = nil, math.huge
+    local hrp = Player.Character:WaitForChild("HumanoidRootPart")
+
+    for _, robbery in pairs(workspace.ObjectSelection:GetChildren()) do
+        if table.find(MiniRobberies, robbery.Name) and not robbery:FindFirstChild("Nope") then
+            local robberyPosition = robbery:GetPivot().Position
+            local distance = (hrp.Position - robberyPosition).Magnitude
+            if distance < closestDistance then
+                closestDistance = distance
+                closestRobbery = robbery
+            end
+        end
+    end
+    return closestRobbery
+end
+
+local function getRobberyEvent(robbery)
+    for _, descendant in pairs(robbery:GetDescendants()) do
+        if descendant:IsA("RemoteEvent") then
+            return descendant
+        end
     end
 end
 
-game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction"):InvokeServer("SetTeam", getgenv().Team)
+-- Function for tween teleportation
+local function tweenToPosition(x, y, z, speed)
+    local hrp = Player.Character:WaitForChild("HumanoidRootPart")
+    local destination = Vector3.new(x, y, z)
+    local distance = (hrp.Position - destination).Magnitude
+    local tweenInfo = TweenInfo.new(distance / speed)
 
+    local tween = TweenService:Create(hrp, tweenInfo, {Position = destination})
+    tween:Play()
+    tween.Completed:Wait()  -- Wait until the tween is finished
+end
+
+-- Main robbery loop
+local function robberyLoop()
+    repeat
+        local closestRobbery = findClosestRobbery()
+
+        if closestRobbery then
+            local robberyPos = closestRobbery:GetPivot().Position
+            local robberyEvent = getRobberyEvent(closestRobbery)
+
+            tweenToPosition(robberyPos.X, robberyPos.Y, robberyPos.Z, flyspeed)
+
+            if robberyEvent then
+                robberyEvent:FireServer()
+            end
+        end
+
+        task.wait(0.05)
+    until not findClosestRobbery()
+end
+
+-- Destroy unnecessary parts in the game
+local function cleanGameWorld()
+    local IgnoreFolder = workspace:WaitForChild("Ignore")
+    IgnoreFolder:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
+    IgnoreFolder:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
+
+    for _, obj in pairs(IgnoreFolder.WorldObjects:GetChildren()) do
+        if obj.Name == "Lasers" then
+            obj:Destroy()
+        end
+    end
+end
+
+-- Initial setup and cleanup
 task.spawn(function()
-    task.wait(40)
+    task.wait(40)  -- Initial delay
     shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 end)
 
-task.wait(getgenv().TimeToLoad)
+task.wait(getgenv().TimeToLoad or 5)
 
-local char = workspace:WaitForChild(game:GetService("Players").LocalPlayer.Name)
-local hrp = char:WaitForChild("HumanoidRootPart")
+-- Cleaning game world
+cleanGameWorld()
 
-function tweenTp(x, y, z, speed)
-    local pos = Vector3.new(x, y, z)
-    
-    local distance = (hrp.Position - pos).Magnitude
-    
-    local info = TweenInfo.new(distance / speed)
-    
-    local Animation = TweenService:Create(hrp, info, {Position = pos})
-    Animation:Play()
-end
+-- Start robbery loop
+robberyLoop()
 
-local MiniRobberies = {
-    "Cash",
-    "CashRegister",
-    "DiamondBox",
-    "Laptop",
-    "Phone",
-    "Luggage",
-    "ATM",
-    "TV",
-    "Safe"
-}
-
-local function get_closest_small_robbery()
-    local closest_robbery = {}
-    for i, v in next, workspace.ObjectSelection:GetChildren() do
-        if not table.find(MiniRobberies, v.Name) then continue end
-        if v:FindFirstChild("Nope") then continue end
-        
-        local function get_model_pos(model)
-            return model:GetPivot().Position
-        end
-        
-        if #closest_robbery == 0 then
-            closest_robbery[1] = v
-            closest_robbery[2] = get_model_pos(v)
-            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-        elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
-            closest_robbery[1] = v
-            closest_robbery[2] = get_model_pos(v)
-            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-        end
-    end
-    return closest_robbery
-end
-
-local function get_event(v)
-    for i, v in next, v:GetDescendants() do
-        if not v:IsA("RemoteEvent") then continue end
-        return v
-    end
-end
-
-repeat
-    local closest_robbery = get_closest_small_robbery()
-    
-    if closest_robbery[1] ~= nil then
-        local closest_robbery_pos = closest_robbery[2]
-        local evento = get_event(closest_robbery[1])
-        tweenTp(closest_robbery_pos.x, closest_robbery_pos.y, closest_robbery_pos.z, flyspeed)
-        if evento ~= nil and evento.Parent ~= nil then
-            evento:FireServer()
-        end
-    end
-    task.wait(0.05)
-until closest_robbery[1] == nil
-
-task.wait(0.2)
-
-shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
-
+-- Server hopping loop every 5 seconds
 task.spawn(function()
     while true do
-        task.wait(5)
-        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
+        task.wait(5)  -- Wait for 5 seconds before hopping
+        serverHop(getgenv().ServerHop.min, getgenv().ServerHop.max)
     end
 end)
