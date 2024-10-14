@@ -1,4 +1,5 @@
-repeat task.wait() until game:IsLoaded()
+-- Wait until the game is fully loaded
+task.wait()
 
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -7,8 +8,7 @@ local Player = game.Players.LocalPlayer
 
 local flyspeed = getgenv().FlySpeed or 50
 local retryLimit = 5  -- Retry limit for server hop
-local retryCount = 0
-local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5  -- Set default min/max players if not provided
+local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
 local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
 
 -- Function to retrieve the list of available servers
@@ -17,20 +17,28 @@ local function getServerList(cursor)
     local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
     if cursor then apiUrl = apiUrl .. "&cursor=" .. cursor end
 
-    local success, response = pcall(function()
-        return game:HttpGet(apiUrl)
-    end)
-
-    if success then
-        local decodedResponse = HttpService:JSONDecode(response)
-        return decodedResponse
-    else
-        warn("Failed to retrieve server list: " .. response)
-        return nil
+    for attempt = 1, retryLimit do
+        local success, response = pcall(function()
+            return game:HttpGet(apiUrl)
+        end)
+        
+        if success then
+            local decodedResponse = HttpService:JSONDecode(response)
+            if decodedResponse and decodedResponse.data and #decodedResponse.data > 0 then
+                return decodedResponse  -- Valid response with server data
+            else
+                warn("No servers found, retrying... (Attempt " .. attempt .. ")")
+            end
+        else
+            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. response)
+        end
+        task.wait(3)  -- Wait before retrying
     end
+
+    return nil  -- Return nil if all attempts fail
 end
 
--- Server hopping function with enhanced logic
+-- Enhanced server hopping function
 local function serverHop()
     local placeId, jobId = game.PlaceId, game.JobId
     local nextCursor = nil
@@ -38,7 +46,7 @@ local function serverHop()
 
     while retryCount < retryLimit do
         local servers = getServerList(nextCursor)
-        
+
         if servers and servers.data then
             for _, server in pairs(servers.data) do
                 -- Check if the server has a valid player count and is not the current server
@@ -57,16 +65,17 @@ local function serverHop()
             end
             nextCursor = servers.nextPageCursor
         else
-            warn("No servers found or failed to retrieve server list.")
             retryCount = retryCount + 1
-            task.wait(3)  -- Wait before retrying
+            warn("No valid servers found, retrying... (Retry " .. retryCount .. "/" .. retryLimit .. ")")
+            task.wait(5)  -- Increase wait time before retrying
         end
-        
+
         if not nextCursor then
             print("No more servers to hop to.")
-            retryCount = retryLimit  -- Break out of the loop if no more servers
+            break  -- Exit if no more servers are available
         end
     end
+
     warn("Server hop failed after " .. retryLimit .. " retries.")
 end
 
@@ -151,10 +160,10 @@ task.spawn(function()
     end
 end)
 
--- Server hopping loop every 5 seconds
+-- Server hopping loop every 30 seconds
 task.spawn(function()
     while true do
-        task.wait(5)
-        serverHop()  -- Try to hop every 5 seconds
+        task.wait(30)
+        serverHop()  -- Try to hop every 30 seconds
     end
 end)
