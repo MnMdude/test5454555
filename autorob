@@ -16,6 +16,11 @@ local teleportRetries = 3 -- Retry teleportation 3 times if it fails
 -- Robbery items to look for
 local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
 
+-- Tween settings for smooth movement
+local tweenSpeed = 50  -- Adjust speed (higher is faster)
+local tweenStyle = Enum.EasingStyle.Linear
+local tweenDirection = Enum.EasingDirection.InOut
+
 -- Function to create ESP for a target
 local function createESP(object, color)
     -- Create ESP UI objects
@@ -58,8 +63,50 @@ local function addRobberyESP()
     end
 end
 
--- Run ESP updates continuously
-local function updateESP()
+-- Function to move player to a target smoothly using TweenService
+local function moveToTarget(targetPosition)
+    if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
+        local humanoidRootPart = Player.Character.HumanoidRootPart
+        
+        -- Create tween info
+        local tweenInfo = TweenInfo.new(
+            (targetPosition - humanoidRootPart.Position).Magnitude / tweenSpeed, -- Time based on distance
+            tweenStyle,
+            tweenDirection
+        )
+
+        -- Create the tween to move to target
+        local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
+        tween:Play()
+        tween.Completed:Wait()  -- Wait for the movement to finish
+    end
+end
+
+-- Faster robbing logic
+local function fastRob(object)
+    if object and object:IsDescendantOf(workspace) then
+        moveToTarget(object.Position)  -- Move to object smoothly
+        task.wait(0.5)  -- Short wait to simulate the interaction time (reduce this to make faster)
+        
+        -- Assume we "collect" the object (you can add more logic here)
+        if object:FindFirstChild("Destroy") then
+            object:Destroy()  -- Destroy the object after robbing (simulating a successful robbery)
+        end
+    end
+end
+
+-- Function to add ESP and rob all robbery objects
+local function addRobberyESPAndRob()
+    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
+        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
+            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
+            fastRob(object)  -- Rob the object faster
+        end
+    end
+end
+
+-- Run ESP updates and robbing continuously
+local function updateESPAndRobbing()
     -- Remove old ESPs
     for _, v in pairs(workspace:GetDescendants()) do
         if v:IsA("BillboardGui") and v.Name == "ESP" then
@@ -67,14 +114,51 @@ local function updateESP()
         end
     end
 
-    -- Add new ESPs
+    -- Add ESPs and perform robbing
     addPlayerESP()
-    addRobberyESP()
+    addRobberyESPAndRob()
 end
 
 -- Connect the update function to every frame
 RunService.RenderStepped:Connect(function()
-    updateESP()
+    updateESPAndRobbing()
 end)
 
--- Rest of your original code...
+-- Godmode function (unchanged from earlier)
+local function enableGodmode()
+    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        local humanoid = Player.Character.Humanoid
+        
+        -- Max out health
+        humanoid.MaxHealth = 100
+        humanoid.Health = humanoid.MaxHealth
+        
+        -- Override TakeDamage to prevent health reduction
+        humanoid.TakeDamage = function() end
+        
+        -- Regularly ensure health is full
+        RunService.RenderStepped:Connect(function()
+            if humanoid.Health < humanoid.MaxHealth then
+                humanoid.Health = humanoid.MaxHealth
+            end
+        end)
+        
+        -- Optional: Prevent fall damage
+        humanoid.StateChanged:Connect(function(_, newState)
+            if newState == Enum.HumanoidStateType.Freefall then
+                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
+            end
+        end)
+    end
+end
+
+-- Enable godmode on character spawn
+Player.CharacterAdded:Connect(function(character)
+    task.wait(1)  -- Small wait to ensure character is fully loaded
+    enableGodmode()
+end)
+
+-- Call godmode if character is already loaded
+if Player.Character then
+    enableGodmode()
+end
