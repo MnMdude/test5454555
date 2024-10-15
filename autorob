@@ -144,10 +144,10 @@ task.spawn(function()
     end
 end)
 
--- Server hopping loop every 60 seconds
+-- Server hopping loop every 8 seconds
 task.spawn(function()
     while true do
-        task.wait(60)
-        serverHop()  -- Try to hop every 60 seconds
+        task.wait(8)  -- Wait 8 seconds before trying to hop to another server
+        serverHop()
     end
 end)
