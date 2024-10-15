@@ -1,153 +1,59 @@
-repeat task.wait() until game:IsLoaded()
+-- Variables
+local Players = game:GetService("Players")
 
-loadstring(game:HttpGet("https://pastebin.com/raw/Dffn96Gz"))()
+-- Function to create an HP bar for a player
+local function createHealthBar(character)
+    -- Check if the player already has a health bar
+    if character:FindFirstChild("HealthBarGui") then return end
 
-local TweenService = game:GetService("TweenService")
+    -- Create BillboardGui
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "HealthBarGui"
+    billboardGui.Size = UDim2.new(5, 0, 1, 0) -- Adjust size (width and height)
+    billboardGui.StudsOffset = Vector3.new(2, 3, 0) -- Position it to the side of the player
+    billboardGui.Adornee = character:WaitForChild("HumanoidRootPart") -- Attach to player's root part
+    billboardGui.AlwaysOnTop = true -- Ensure visibility through walls
+    billboardGui.Parent = character
+    
+    -- Create background frame for the health bar
+    local bgFrame = Instance.new("Frame")
+    bgFrame.Size = UDim2.new(1, 0, 0.2, 0) -- Height and width of the bar background
+    bgFrame.Position = UDim2.new(0, 0, 0.5, 0)
+    bgFrame.BackgroundColor3 = Color3.new(0, 0, 0) -- Black background
+    bgFrame.BorderSizePixel = 0
+    bgFrame.Parent = billboardGui
 
---prepare the script
-local flyspeed = getgenv().FlySpeed
+    -- Create health bar frame
+    local healthBar = Instance.new("Frame")
+    healthBar.Name = "HealthBar"
+    healthBar.Size = UDim2.new(1, 0, 1, 0) -- Initial full size
+    healthBar.BackgroundColor3 = Color3.new(0, 1, 0) -- Green color
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = bgFrame
 
-function shop(min, max)
-    local goofyahhvalue = math.random(min, max)
-    local Player = game.Players.LocalPlayer    
-    local Http = game:GetService("HttpService")
-    local TPS = game:GetService("TeleportService")
-    local Api = "https://games.roblox.com/v1/games/"
-
-    local _place,_id = game.PlaceId, game.JobId
-    local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
-    function ListServers(cursor)
-        local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
-        return Http:JSONDecode(Raw)
+    -- Create a function to update health
+    local function updateHealth()
+        local humanoid = character:WaitForChild("Humanoid")
+        local healthPercentage = humanoid.Health / humanoid.MaxHealth
+        healthBar.Size = UDim2.new(healthPercentage, 0, 1, 0) -- Resize based on health percentage
     end
 
-    local Next; repeat
-        task.wait()
-        local Servers = ListServers(Next)
-        for i,v in next, Servers.data do
-            if v.playing < goofyahhvalue and v.id ~= _id then
-                local s,r = pcall(TPS.TeleportToPlaceInstance,TPS,_place,v.id,Player)
-                if s then task.wait(5) break end
-            end
-        end
-        Next = Servers.nextPageCursor
-    until not Next
+    -- Update the health bar when the player's health changes
+    local humanoid = character:WaitForChild("Humanoid")
+    humanoid.HealthChanged:Connect(updateHealth)
+    updateHealth() -- Initial update when the player spawns
 end
 
-getgenv().shop = shop
-
-workspace:WaitForChild("Ignore")
-workspace:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
-workspace:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
-task.wait(0.5)
-for i, v in next, workspace.Ignore.WorldObjects:GetChildren() do
-    if v.Name == "Lasers" then
-        v:Destroy()
-    end
-end
-
-game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction"):InvokeServer("SetTeam", getgenv().Team)
-
-task.spawn(function()
-    task.wait(40)
-    shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
+-- Apply health bars to all players
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        createHealthBar(character)
+    end)
 end)
 
-task.wait(getgenv().TimeToLoad)
-
---[[local KeySystemUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaGiXxScripter0/keysystemv2api/master/ui/xrer_mstudio45.lua"))()
-KeySystemUI.New({
-    ApplicationName = "BlueLobster", -- Your Key System Application Name
-    Name = "Mad Lads v8", -- Your Script name
-    Info = "Get Key For Mad Lads v8", -- Info text in the GUI, keep empty for default text.
-    DiscordInvite = "https://discord.gg/cWqTmQDwDJ", -- Optional.
-    AuthType = "clientid" -- Can select verifycation with ClientId or IP ("clientid" or "ip")
-})
-repeat task.wait() until KeySystemUI.Finished() or KeySystemUI.Closed
-if KeySystemUI.Finished() and KeySystemUI.Closed == false then
-else
-    game:ShutDown()
-end]]--
---prepare the script
-
-local char = workspace:WaitForChild(game:GetService("Players").LocalPlayer.Name)
-local hrp = char:WaitForChild("HumanoidRootPart")
-
-function tweenTp(x, y, z, speed)
-    local pos = Vector3.new(x, y, z)
-    
-    local distance = (hrp.Position - pos).Magnitude
-    
-    local info = TweenInfo.new(distance / speed) -- how long the tween will play for
-    
-    local Animation = TweenService:Create(hrp, info, {Position = pos})
-    Animation:Play()
-end
-
-local MiniRobberies = {
-    "Cash",
-    "CashRegister",
-    "DiamondBox",
-    "Laptop",
-    "Phone",
-    "Luggage",
-    "ATM",
-    "TV",
-    "Safe"
-}
-
-local function get_closest_small_robbery()
-    local closest_robbery = {}
-    for i, v in next, workspace.ObjectSelection:GetChildren() do
-        if not table.find(MiniRobberies, v.Name) then continue end
-        if v:FindFirstChild("Nope") then continue end
-        
-        local function get_model_pos(model)
-            return model:GetPivot().Position
-        end
-        
-        if #closest_robbery == 0 then --nothing in table so put the first thing
-            closest_robbery[1] = v
-            closest_robbery[2] = get_model_pos(v)
-            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-        elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
-            closest_robbery[1] = v
-            closest_robbery[2] = get_model_pos(v)
-            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
-        end
-    end
-    return closest_robbery
-end
-
-local function get_event(v)
-    for i, v in next, v:GetDescendants() do
-        if not v:IsA("RemoteEvent") then continue end
-        return v
+-- For existing players
+for _, player in pairs(Players:GetPlayers()) do
+    if player.Character then
+        createHealthBar(player.Character)
     end
 end
-
-repeat
-    local closest_robbery = get_closest_small_robbery()
-    
-    if closest_robbery[1] ~= nil then
-        local closest_robbery_pos = closest_robbery[2]
-        local evento = get_event(closest_robbery[1])
-        tweenTp(closest_robbery_pos.x, closest_robbery_pos.y, closest_robbery_pos.z, flyspeed)
-        if evento ~= nil and evento.Parent ~= nil then
-            evento:FireServer()
-        end
-    end
-    task.wait(0.05)
-until closest_robbery[1] == nil
-
-task.wait(0.2)
-
-shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
-
--- Server hopper modified to hop every 30 seconds
-task.spawn(function()
-    while true do  -- Create an infinite loop to hop servers every 30 seconds
-        task.wait(30)  -- Wait for 30 seconds
-        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)  -- Call the server hop function
-    end
-end)
