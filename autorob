@@ -29,7 +29,9 @@ function shop(min, max)
         local servers = ListServers(NextPage)
         for _, server in ipairs(servers.data) do
             if server.playing < playerCount and server.id ~= _id then
-                local success = pcall(TPS.TeleportToPlaceInstance, TPS, _place, server.id, Player)
+                local success = pcall(function()
+                    TPS:TeleportToPlaceInstance(_place, server.id, Player)
+                end)
                 if success then task.wait(5) break end
             end
         end
@@ -132,7 +134,7 @@ shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 -- Infinite loop to hop servers every 30 seconds
 task.spawn(function()
     while true do
-        task.wait(30)
+        task.wait(30)  -- Wait for 30 seconds before server hopping again
         shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
     end
 end)
