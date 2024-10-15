@@ -1,140 +1,153 @@
--- Wait until the game is fully loaded
 repeat task.wait() until game:IsLoaded()
 
--- Load external script
 loadstring(game:HttpGet("https://pastebin.com/raw/Dffn96Gz"))()
 
--- Initialize services
 local TweenService = game:GetService("TweenService")
-local Http = game:GetService("HttpService")
-local TPS = game:GetService("TeleportService")
-local Player = game.Players.LocalPlayer
 
--- Fly speed for teleportation
-local flyspeed = getgenv().FlySpeed or 100
+--prepare the script
+local flyspeed = getgenv().FlySpeed
 
--- Function to handle server hopping
 function shop(min, max)
-    local playerCount = math.random(min, max)
-    local _place, _id = game.PlaceId, game.JobId
-    local _serversUrl = "https://games.roblox.com/v1/games/" .. _place .. "/servers/Public?sortOrder=Desc&limit=100"
-    
-    local function ListServers(cursor)
-        local response = game:HttpGet(_serversUrl .. ((cursor and "&cursor="..cursor) or ""))
-        return Http:JSONDecode(response)
+    local goofyahhvalue = math.random(min, max)
+    local Player = game.Players.LocalPlayer    
+    local Http = game:GetService("HttpService")
+    local TPS = game:GetService("TeleportService")
+    local Api = "https://games.roblox.com/v1/games/"
+
+    local _place,_id = game.PlaceId, game.JobId
+    local _servers = Api.._place.."/servers/Public?sortOrder=Desc&limit=100"
+    function ListServers(cursor)
+        local Raw = game:HttpGet(_servers .. ((cursor and "&cursor="..cursor) or ""))
+        return Http:JSONDecode(Raw)
     end
 
-    local NextPage; repeat
+    local Next; repeat
         task.wait()
-        local servers = ListServers(NextPage)
-        for _, server in ipairs(servers.data) do
-            if server.playing < playerCount and server.id ~= _id then
-                local success = pcall(function()
-                    TPS:TeleportToPlaceInstance(_place, server.id, Player)
-                end)
-                if success then task.wait(5) break end
+        local Servers = ListServers(Next)
+        for i,v in next, Servers.data do
+            if v.playing < goofyahhvalue and v.id ~= _id then
+                local s,r = pcall(TPS.TeleportToPlaceInstance,TPS,_place,v.id,Player)
+                if s then task.wait(5) break end
             end
         end
-        NextPage = servers.nextPageCursor
-    until not NextPage
+        Next = Servers.nextPageCursor
+    until not Next
 end
 
 getgenv().shop = shop
 
--- Destroy game objects (e.g., lasers)
 workspace:WaitForChild("Ignore")
 workspace:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
 workspace:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
-
 task.wait(0.5)
-for _, object in ipairs(workspace.Ignore.WorldObjects:GetChildren()) do
-    if object.Name == "Lasers" then
-        object:Destroy()
+for i, v in next, workspace.Ignore.WorldObjects:GetChildren() do
+    if v.Name == "Lasers" then
+        v:Destroy()
     end
 end
 
--- Switch team using RemoteFunction
-pcall(function()
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction"):InvokeServer("SetTeam", getgenv().Team)
-end)
+game:GetService("ReplicatedStorage"):WaitForChild("RemoteFunction"):InvokeServer("SetTeam", getgenv().Team)
 
--- Server hopping logic (first hop after 40 seconds)
 task.spawn(function()
     task.wait(40)
     shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 end)
 
--- Function to tween (smooth teleport) the player to a specific location
-local char = workspace:WaitForChild(Player.Name)
+task.wait(getgenv().TimeToLoad)
+
+--[[local KeySystemUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaGiXxScripter0/keysystemv2api/master/ui/xrer_mstudio45.lua"))()
+KeySystemUI.New({
+    ApplicationName = "BlueLobster", -- Your Key System Application Name
+    Name = "Mad Lads v8", -- Your Script name
+    Info = "Get Key For Mad Lads v8", -- Info text in the GUI, keep empty for default text.
+    DiscordInvite = "https://discord.gg/cWqTmQDwDJ", -- Optional.
+    AuthType = "clientid" -- Can select verifycation with ClientId or IP ("clientid" or "ip")
+})
+repeat task.wait() until KeySystemUI.Finished() or KeySystemUI.Closed
+if KeySystemUI.Finished() and KeySystemUI.Closed == false then
+else
+    game:ShutDown()
+end]]--
+--prepare the script
+
+local char = workspace:WaitForChild(game:GetService("Players").LocalPlayer.Name)
 local hrp = char:WaitForChild("HumanoidRootPart")
 
-local function tweenTp(x, y, z, speed)
+function tweenTp(x, y, z, speed)
     local pos = Vector3.new(x, y, z)
+    
     local distance = (hrp.Position - pos).Magnitude
-    local info = TweenInfo.new(distance / speed)
-    local animation = TweenService:Create(hrp, info, {Position = pos})
-    animation:Play()
+    
+    local info = TweenInfo.new(distance / speed) -- how long the tween will play for
+    
+    local Animation = TweenService:Create(hrp, info, {Position = pos})
+    Animation:Play()
 end
 
--- Mini-robberies detection
 local MiniRobberies = {
-    "Cash", "CashRegister", "DiamondBox", "Laptop",
-    "Phone", "Luggage", "ATM", "TV", "Safe"
+    "Cash",
+    "CashRegister",
+    "DiamondBox",
+    "Laptop",
+    "Phone",
+    "Luggage",
+    "ATM",
+    "TV",
+    "Safe"
 }
 
--- Function to get the closest small robbery
 local function get_closest_small_robbery()
     local closest_robbery = {}
-    
-    for _, v in ipairs(workspace.ObjectSelection:GetChildren()) do
-        if not table.find(MiniRobberies, v.Name) or v:FindFirstChild("Nope") then continue end
-
-        local modelPos = v:GetPivot().Position
-        local distance = (modelPos - hrp.Position).Magnitude
+    for i, v in next, workspace.ObjectSelection:GetChildren() do
+        if not table.find(MiniRobberies, v.Name) then continue end
+        if v:FindFirstChild("Nope") then continue end
         
-        if #closest_robbery == 0 or distance < closest_robbery[3] then
-            closest_robbery = {v, modelPos, distance}
+        local function get_model_pos(model)
+            return model:GetPivot().Position
+        end
+        
+        if #closest_robbery == 0 then --nothing in table so put the first thing
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
+        elseif (get_model_pos(v) - hrp.Position).Magnitude < (closest_robbery[2] - hrp.Position).Magnitude then
+            closest_robbery[1] = v
+            closest_robbery[2] = get_model_pos(v)
+            closest_robbery[3] = (get_model_pos(v) - hrp.Position).Magnitude
         end
     end
     return closest_robbery
 end
 
--- Function to get the RemoteEvent in a robbery object
-local function get_event(object)
-    for _, descendant in ipairs(object:GetDescendants()) do
-        if descendant:IsA("RemoteEvent") then
-            return descendant
-        end
+local function get_event(v)
+    for i, v in next, v:GetDescendants() do
+        if not v:IsA("RemoteEvent") then continue end
+        return v
     end
 end
 
--- Main loop to handle small robberies
 repeat
     local closest_robbery = get_closest_small_robbery()
     
-    if closest_robbery[1] then
-        local robberyPos = closest_robbery[2]
-        local event = get_event(closest_robbery[1])
-        
-        tweenTp(robberyPos.x, robberyPos.y, robberyPos.z, flyspeed)
-        if event then
-            pcall(function()
-                event:FireServer()
-            end)
+    if closest_robbery[1] ~= nil then
+        local closest_robbery_pos = closest_robbery[2]
+        local evento = get_event(closest_robbery[1])
+        tweenTp(closest_robbery_pos.x, closest_robbery_pos.y, closest_robbery_pos.z, flyspeed)
+        if evento ~= nil and evento.Parent ~= nil then
+            evento:FireServer()
         end
     end
     task.wait(0.05)
-until not closest_robbery[1]
+until closest_robbery[1] == nil
 
 task.wait(0.2)
 
--- Initial server hop
 shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
 
--- Infinite loop to hop servers every 30 seconds
+-- Server hopper modified to hop every 30 seconds
 task.spawn(function()
-    while true do
-        task.wait(30)  -- Wait for 30 seconds before server hopping again
-        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)
+    while true do  -- Create an infinite loop to hop servers every 30 seconds
+        task.wait(30)  -- Wait for 30 seconds
+        shop(getgenv().ServerHop.min, getgenv().ServerHop.max)  -- Call the server hop function
     end
 end)
