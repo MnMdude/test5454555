@@ -1,164 +1,153 @@
--- Wait until the game is fully loaded
-task.wait()
+-- Services
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
 
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
-local PlayerService = game:GetService("Players")
-local Player = PlayerService.LocalPlayer
+-- Color Config
+local fillColor = Color3.fromRGB(0, 1, 0)      -- Green color for the health bar
+local backgroundColor = Color3.new(0, 0, 0)    -- Black background for the health bar
 
-local flyspeed = getgenv().FlySpeed or 50
-local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
-local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
-local teleportRetries = 3 -- Retry teleportation 3 times if it fails
+-- Function to create an HP bar for a player
+local function createHealthBar(character)
+    -- Check if the player already has a health bar
+    if character:FindFirstChild("HealthBarGui") then return end
 
--- Robbery items to look for
-local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
+    -- Create BillboardGui
+    local billboardGui = Instance.new("BillboardGui")
+    billboardGui.Name = "HealthBarGui"
+    billboardGui.Size = UDim2.new(5, 0, 1, 0) -- Adjust size (width and height)
+    billboardGui.StudsOffset = Vector3.new(2, 3, 0) -- Position it to the side of the player
+    billboardGui.Adornee = character:WaitForChild("HumanoidRootPart") -- Attach to player's root part
+    billboardGui.AlwaysOnTop = true -- Ensure visibility through walls
+    billboardGui.Parent = character
 
--- Tween settings for smooth movement
-local tweenSpeed = 50  -- Adjust speed (higher is faster)
-local tweenStyle = Enum.EasingStyle.Linear
-local tweenDirection = Enum.EasingDirection.InOut
+    -- Create background frame for the health bar
+    local bgFrame = Instance.new("Frame")
+    bgFrame.Size = UDim2.new(1, 0, 0.2, 0) -- Height and width of the bar background
+    bgFrame.Position = UDim2.new(0, 0, 0.5, 0)
+    bgFrame.BackgroundColor3 = backgroundColor -- Black background
+    bgFrame.BorderSizePixel = 0
+    bgFrame.Parent = billboardGui
 
--- Function to create ESP for a target
-local function createESP(object, color)
-    -- Create ESP UI objects
-    local Billboard = Instance.new("BillboardGui")
-    local Frame = Instance.new("Frame")
+    -- Create health bar frame
+    local healthBar = Instance.new("Frame")
+    healthBar.Name = "HealthBar"
+    healthBar.Size = UDim2.new(1, 0, 1, 0) -- Initial full size
+    healthBar.BackgroundColor3 = fillColor -- Green color
+    healthBar.BorderSizePixel = 0
+    healthBar.Parent = bgFrame
 
-    -- BillboardGui settings
-    Billboard.Name = "ESP"
-    Billboard.Adornee = object
-    Billboard.AlwaysOnTop = true
-    Billboard.Size = UDim2.new(0, 200, 0, 50)
-    Billboard.StudsOffset = Vector3.new(0, 2, 0)
+    -- Create a function to update health
+    local function updateHealth()
+        local humanoid = character:WaitForChild("Humanoid")
+        local healthPercentage = humanoid.Health / humanoid.MaxHealth
+        healthBar.Size = UDim2.new(healthPercentage, 0, 1, 0) -- Resize based on health percentage
+    end
 
-    -- Frame settings
-    Frame.Size = UDim2.new(1, 0, 1, 0)
-    Frame.BackgroundTransparency = 0.5
-    Frame.BackgroundColor3 = color
-    Frame.BorderSizePixel = 0
-
-    -- Parent UI elements
-    Frame.Parent = Billboard
-    Billboard.Parent = object
+    -- Update the health bar when the player's health changes
+    local humanoid = character:WaitForChild("Humanoid")
+    humanoid.HealthChanged:Connect(updateHealth)
+    updateHealth() -- Initial update when the player spawns
 end
 
--- Function to add ESP to all players
-local function addPlayerESP()
-    for _, v in pairs(PlayerService:GetPlayers()) do
-        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            createESP(v.Character.HumanoidRootPart, Color3.fromRGB(255, 0, 0))  -- Red for players
+-- Create draggable rounded GUI with minimize feature
+local function createDraggableGui(player)
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "CustomGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+
+    -- Create the main frame (draggable window)
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 300, 0, 150)
+    mainFrame.Position = UDim2.new(0.5, -150, 0.5, -75) -- Center of the screen
+    mainFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    mainFrame.BackgroundTransparency = 0.1
+    mainFrame.Parent = screenGui
+
+    -- Round the corners
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 20) -- Rounded corner radius
+    corner.Parent = mainFrame
+
+    -- Create minimize button
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Text = "-"
+    minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+    minimizeButton.Position = UDim2.new(1, -35, 0, 5)
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+    minimizeButton.Parent = mainFrame
+
+    -- Round the corners of minimize button
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 10)
+    buttonCorner.Parent = minimizeButton
+
+    -- Variable to track minimized state
+    local isMinimized = false
+    local originalSize = mainFrame.Size
+
+    -- Minimize/Maximize functionality
+    minimizeButton.MouseButton1Click:Connect(function()
+        if isMinimized then
+            mainFrame.Size = originalSize
+            minimizeButton.Text = "-"
+        else
+            mainFrame.Size = UDim2.new(0, 300, 0, 30) -- Minimize size
+            minimizeButton.Text = "+"
         end
-    end
-end
+        isMinimized = not isMinimized
+    end)
 
--- Function to add ESP to robbery objects
-local function addRobberyESP()
-    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
-            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
+    -- Draggable functionality
+    local dragging = false
+    local dragInput, mousePos, framePos
+
+    local function update(input)
+        local delta = input.Position - mousePos
+        mainFrame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+    end
+
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            mousePos = input.Position
+            framePos = mainFrame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
-    end
-end
+    end)
 
--- Function to move player to a target smoothly using TweenService
-local function moveToTarget(targetPosition)
-    if Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") then
-        local humanoidRootPart = Player.Character.HumanoidRootPart
-        
-        -- Create tween info
-        local tweenInfo = TweenInfo.new(
-            (targetPosition - humanoidRootPart.Position).Magnitude / tweenSpeed, -- Time based on distance
-            tweenStyle,
-            tweenDirection
-        )
-
-        -- Create the tween to move to target
-        local tween = TweenService:Create(humanoidRootPart, tweenInfo, {CFrame = CFrame.new(targetPosition)})
-        tween:Play()
-        tween.Completed:Wait()  -- Wait for the movement to finish
-    end
-end
-
--- Faster robbing logic
-local function fastRob(object)
-    if object and object:IsDescendantOf(workspace) then
-        moveToTarget(object.Position)  -- Move to object smoothly
-        task.wait(0.5)  -- Short wait to simulate the interaction time (reduce this to make faster)
-        
-        -- Assume we "collect" the object (you can add more logic here)
-        if object:FindFirstChild("Destroy") then
-            object:Destroy()  -- Destroy the object after robbing (simulating a successful robbery)
+    mainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
         end
-    end
-end
+    end)
 
--- Function to add ESP and rob all robbery objects
-local function addRobberyESPAndRob()
-    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
-            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
-            fastRob(object)  -- Rob the object faster
+    UIS.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
         end
-    end
+    end)
 end
 
--- Run ESP updates and robbing continuously
-local function updateESPAndRobbing()
-    -- Remove old ESPs
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BillboardGui") and v.Name == "ESP" then
-            v:Destroy()
-        end
-    end
-
-    -- Add ESPs and perform robbing
-    addPlayerESP()
-    addRobberyESPAndRob()
-end
-
--- Connect the update function to every frame
-RunService.RenderStepped:Connect(function()
-    updateESPAndRobbing()
+-- Apply health bar and draggable GUI to all players
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        createHealthBar(character)
+        createDraggableGui(player)
+    end)
 end)
 
--- Godmode function (unchanged from earlier)
-local function enableGodmode()
-    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
-        local humanoid = Player.Character.Humanoid
-        
-        -- Max out health
-        humanoid.MaxHealth = 100
-        humanoid.Health = humanoid.MaxHealth
-        
-        -- Override TakeDamage to prevent health reduction
-        humanoid.TakeDamage = function() end
-        
-        -- Regularly ensure health is full
-        RunService.RenderStepped:Connect(function()
-            if humanoid.Health < humanoid.MaxHealth then
-                humanoid.Health = humanoid.MaxHealth
-            end
-        end)
-        
-        -- Optional: Prevent fall damage
-        humanoid.StateChanged:Connect(function(_, newState)
-            if newState == Enum.HumanoidStateType.Freefall then
-                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
-            end
-        end)
+-- For existing players
+for _, player in pairs(Players:GetPlayers()) do
+    if player.Character then
+        createHealthBar(player.Character)
+        createDraggableGui(player)
     end
-end
-
--- Enable godmode on character spawn
-Player.CharacterAdded:Connect(function(character)
-    task.wait(1)  -- Small wait to ensure character is fully loaded
-    enableGodmode()
-end)
-
--- Call godmode if character is already loaded
-if Player.Character then
-    enableGodmode()
 end
