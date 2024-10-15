@@ -77,4 +77,38 @@ RunService.RenderStepped:Connect(function()
     updateESP()
 end)
 
+-- Godmode function
+local function enableGodmode()
+    if Player.Character and Player.Character:FindFirstChild("Humanoid") then
+        local humanoid = Player.Character.Humanoid
+
+        -- Set health to a high value
+        humanoid.MaxHealth = math.huge
+        humanoid.Health = humanoid.MaxHealth
+
+        -- Prevent damage by constantly setting health to max
+        humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+            humanoid.Health = humanoid.MaxHealth
+        end)
+
+        -- Prevent fall damage by setting state to `PlatformStanding` (optional)
+        humanoid.StateChanged:Connect(function(_, newState)
+            if newState == Enum.HumanoidStateType.Freefall then
+                humanoid:ChangeState(Enum.HumanoidStateType.PlatformStanding)
+            end
+        end)
+    end
+end
+
+-- Enable godmode on character spawn
+Player.CharacterAdded:Connect(function(character)
+    task.wait(1)  -- Small wait to ensure character is fully loaded
+    enableGodmode()
+end)
+
+-- Call godmode if character is already loaded
+if Player.Character then
+    enableGodmode()
+end
+
 -- Rest of your original code...
