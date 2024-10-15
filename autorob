@@ -4,155 +4,77 @@ task.wait()
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local Player = game.Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local PlayerService = game:GetService("Players")
+local Player = PlayerService.LocalPlayer
 
 local flyspeed = getgenv().FlySpeed or 50
 local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
 local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
 local teleportRetries = 3 -- Retry teleportation 3 times if it fails
 
--- Function to retrieve the list of available servers with retry logic
-local function getServerList(cursor)
-    local placeId = game.PlaceId
-    local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
-    if cursor then apiUrl = apiUrl .. "&cursor=" .. cursor end
-
-    for attempt = 1, 3 do
-        local success, response = pcall(function()
-            return game:HttpGet(apiUrl)
-        end)
-
-        if success then
-            local decodedResponse = HttpService:JSONDecode(response)
-            if decodedResponse and decodedResponse.data then
-                return decodedResponse  -- Successfully fetched server data
-            end
-        else
-            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. response)
-        end
-
-        task.wait(3)  -- Wait 3 seconds before retrying the request
-    end
-    return nil -- Return nil if unable to retrieve servers
-end
-
--- Simplified and stable server hopping function with retries
-local function serverHop()
-    local placeId, jobId = game.PlaceId, game.JobId
-    local nextCursor = nil
-
-    while true do
-        local servers = getServerList(nextCursor)
-        if servers and servers.data then
-            for _, server in pairs(servers.data) do
-                -- Check if the server has a valid player count and is not the current server
-                if server.playing >= minPlayers and server.playing <= maxPlayers and server.id ~= jobId then
-                    -- Retry teleportation if it fails
-                    for attempt = 1, teleportRetries do
-                        local success, result = pcall(function()
-                            return TeleportService:TeleportToPlaceInstance(placeId, server.id, Player)
-                        end)
-                        if success then
-                            print("Successfully hopped to server: " .. server.id)
-                            return  -- Exit after successful teleport
-                        else
-                            warn("Failed to teleport (Attempt " .. attempt .. "): " .. result)
-                        end
-                        task.wait(2)  -- Wait before retrying the teleport
-                    end
-                end
-            end
-
-            nextCursor = servers.nextPageCursor
-            if not nextCursor then
-                warn("No more servers to hop to.")
-                break  -- Stop if no more servers are available
-            end
-        else
-            warn("No valid servers found or failed to retrieve server list.")
-            break  -- Break the loop if no servers are found or if the API call failed
-        end
-    end
-end
-
 -- Robbery items to look for
 local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
 
--- Function to handle teleporting to a robbery object
-local function tweenToPosition(pos, speed)
-    local hrp = Player.Character:WaitForChild("HumanoidRootPart")
-    local distance = (hrp.Position - pos).Magnitude
-    local tweenInfo = TweenInfo.new(distance / speed)
+-- Function to create ESP for a target
+local function createESP(object, color)
+    -- Create ESP UI objects
+    local Billboard = Instance.new("BillboardGui")
+    local Frame = Instance.new("Frame")
 
-    local tween = TweenService:Create(hrp, tweenInfo, {Position = pos})
-    tween:Play()
-    tween.Completed:Wait()
+    -- BillboardGui settings
+    Billboard.Name = "ESP"
+    Billboard.Adornee = object
+    Billboard.AlwaysOnTop = true
+    Billboard.Size = UDim2.new(0, 200, 0, 50)
+    Billboard.StudsOffset = Vector3.new(0, 2, 0)
+
+    -- Frame settings
+    Frame.Size = UDim2.new(1, 0, 1, 0)
+    Frame.BackgroundTransparency = 0.5
+    Frame.BackgroundColor3 = color
+    Frame.BorderSizePixel = 0
+
+    -- Parent UI elements
+    Frame.Parent = Billboard
+    Billboard.Parent = object
 end
 
--- Function to steal from the closest available robbery
-local function attemptRobbery()
-    local hrp = Player.Character:WaitForChild("HumanoidRootPart")
-    local closestRobbery, closestDistance = nil, math.huge
+-- Function to add ESP to all players
+local function addPlayerESP()
+    for _, v in pairs(PlayerService:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            createESP(v.Character.HumanoidRootPart, Color3.fromRGB(255, 0, 0))  -- Red for players
+        end
+    end
+end
 
-    -- Find closest valid robbery
+-- Function to add ESP to robbery objects
+local function addRobberyESP()
     for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and not object:FindFirstChild("Nope") and object:IsDescendantOf(workspace) then
-            local objectPosition = object:GetPivot().Position
-            local distance = (hrp.Position - objectPosition).Magnitude
-            if distance < closestDistance then
-                closestDistance = distance
-                closestRobbery = object
-            end
-        end
-    end
-
-    if closestRobbery then
-        local robberyPos = closestRobbery:GetPivot().Position
-        local event = closestRobbery:FindFirstChildWhichIsA("RemoteEvent", true)
-
-        -- Validate robbery object and position
-        if robberyPos and event then
-            -- Move to robbery and steal
-            tweenToPosition(robberyPos, flyspeed)
-            event:FireServer()
-            print("Stolen from: " .. closestRobbery.Name)
-        else
-            warn("Failed to teleport or find event for: " .. closestRobbery.Name)
-        end
-    else
-        warn("No valid robbery found.")
-    end
-end
-
--- Function to clean unnecessary parts from the game world
-local function cleanGameWorld()
-    local IgnoreFolder = workspace:WaitForChild("Ignore")
-    IgnoreFolder:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
-    IgnoreFolder:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
-
-    for _, obj in pairs(IgnoreFolder.WorldObjects:GetChildren()) do
-        if obj.Name == "Lasers" then
-            obj:Destroy()
+        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
+            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
         end
     end
 end
 
--- Initial setup and cleanup
-task.spawn(function()
-    -- Check if the player has been in-game for more than 30 seconds
-    task.wait(30)
-    serverHop()  -- Hop to another server after 30 seconds
-end)
-
-task.wait(getgenv().TimeToLoad or 5)
-
--- Clean the game world
-cleanGameWorld()
-
--- Robbery loop
-task.spawn(function()
-    while true do
-        attemptRobbery()
-        task.wait(0.1)  -- Increased wait time to reduce spamming the robbery event
+-- Run ESP updates continuously
+local function updateESP()
+    -- Remove old ESPs
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BillboardGui") and v.Name == "ESP" then
+            v:Destroy()
+        end
     end
+
+    -- Add new ESPs
+    addPlayerESP()
+    addRobberyESP()
+end
+
+-- Connect the update function to every frame
+RunService.RenderStepped:Connect(function()
+    updateESP()
 end)
+
+-- Rest of your original code...
