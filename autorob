@@ -11,7 +11,7 @@ local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
 local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
 local teleportRetries = 3 -- Retry teleportation 3 times if it fails
 
--- Function to retrieve the list of available servers with retry logic
+-- Function to retrieve the list of available servers with retry logic and rate limit handling
 local function getServerList(cursor)
     local placeId = game.PlaceId
     local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
@@ -19,7 +19,7 @@ local function getServerList(cursor)
 
     for attempt = 1, 3 do
         local success, response = pcall(function()
-            return game:HttpGet(apiUrl)
+            return HttpService:GetAsync(apiUrl, true)  -- Use GetAsync to avoid rate limits
         end)
 
         if success then
@@ -28,7 +28,7 @@ local function getServerList(cursor)
                 return decodedResponse  -- Successfully fetched server data
             end
         else
-            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. response)
+            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. tostring(response))
         end
 
         task.wait(3)  -- Wait 3 seconds before retrying the request
@@ -36,7 +36,7 @@ local function getServerList(cursor)
     return nil -- Return nil if unable to retrieve servers
 end
 
--- Simplified and stable server hopping function with retries
+-- Improved server hopping function with better teleport retries and filtering
 local function serverHop()
     local placeId, jobId = game.PlaceId, game.JobId
     local nextCursor = nil
@@ -44,9 +44,9 @@ local function serverHop()
     while true do
         local servers = getServerList(nextCursor)
         if servers and servers.data then
-            for _, server in pairs(servers.data) do
-                -- Check if the server has a valid player count and is not the current server
-                if server.playing >= minPlayers and server.playing <= maxPlayers and server.id ~= jobId then
+            for _, server in ipairs(servers.data) do
+                -- Ensure the server has players in the desired range and is not full or the current server
+                if server.playing >= minPlayers and server.playing < server.maxPlayers and server.id ~= jobId then
                     -- Retry teleportation if it fails
                     for attempt = 1, teleportRetries do
                         local success, result = pcall(function()
@@ -56,7 +56,7 @@ local function serverHop()
                             print("Successfully hopped to server: " .. server.id)
                             return  -- Exit after successful teleport
                         else
-                            warn("Failed to teleport (Attempt " .. attempt .. "): " .. result)
+                            warn("Failed to teleport (Attempt " .. attempt .. "): " .. tostring(result))
                         end
                         task.wait(2)  -- Wait before retrying the teleport
                     end
@@ -153,6 +153,6 @@ cleanGameWorld()
 task.spawn(function()
     while true do
         attemptRobbery()
-        task.wait(0.1)  -- Increased wait time to reduce spamming the robbery event
+        task.wait(0.5)  -- Increased wait time to reduce spamming the robbery event
     end
 end)
