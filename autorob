@@ -6,71 +6,58 @@ local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local Player = game.Players.LocalPlayer
 
+-- Global settings
 local flyspeed = getgenv().FlySpeed or 50
 local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
 local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
-local teleportRetries = 3 -- Retry teleportation 3 times if it fails
 
--- Function to retrieve the list of available servers with retry logic and rate limit handling
+-- Function to fetch server list with basic error handling
 local function getServerList(cursor)
-    local placeId = game.PlaceId
-    local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
+    local apiUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
     if cursor then apiUrl = apiUrl .. "&cursor=" .. cursor end
+    
+    local success, response = pcall(function()
+        return HttpService:GetAsync(apiUrl, true)
+    end)
 
-    for attempt = 1, 3 do
-        local success, response = pcall(function()
-            return HttpService:GetAsync(apiUrl, true)  -- Use GetAsync to avoid rate limits
-        end)
-
-        if success then
-            local decodedResponse = HttpService:JSONDecode(response)
-            if decodedResponse and decodedResponse.data then
-                return decodedResponse  -- Successfully fetched server data
-            end
-        else
-            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. tostring(response))
+    if success then
+        local data = HttpService:JSONDecode(response)
+        if data and data.data then
+            return data
         end
-
-        task.wait(3)  -- Wait 3 seconds before retrying the request
     end
-    return nil -- Return nil if unable to retrieve servers
+
+    return nil
 end
 
--- Improved server hopping function with better teleport retries and filtering
+-- Optimized server hop function
 local function serverHop()
-    local placeId, jobId = game.PlaceId, game.JobId
+    local currentJobId = game.JobId
     local nextCursor = nil
 
     while true do
-        local servers = getServerList(nextCursor)
-        if servers and servers.data then
-            for _, server in ipairs(servers.data) do
-                -- Ensure the server has players in the desired range and is not full or the current server
-                if server.playing >= minPlayers and server.playing < server.maxPlayers and server.id ~= jobId then
-                    -- Retry teleportation if it fails
-                    for attempt = 1, teleportRetries do
-                        local success, result = pcall(function()
-                            return TeleportService:TeleportToPlaceInstance(placeId, server.id, Player)
-                        end)
-                        if success then
-                            print("Successfully hopped to server: " .. server.id)
-                            return  -- Exit after successful teleport
-                        else
-                            warn("Failed to teleport (Attempt " .. attempt .. "): " .. tostring(result))
-                        end
-                        task.wait(2)  -- Wait before retrying the teleport
+        local serverData = getServerList(nextCursor)
+        if serverData and serverData.data then
+            for _, server in ipairs(serverData.data) do
+                -- Only hop to servers with valid player counts and skip the current server
+                if server.playing >= minPlayers and server.playing < server.maxPlayers and server.id ~= currentJobId then
+                    local success, result = pcall(function()
+                        return TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, Player)
+                    end)
+
+                    if success then
+                        print("Server hop successful: " .. server.id)
+                        return
+                    else
+                        warn("Teleport failed: " .. tostring(result))
                     end
                 end
             end
-
-            nextCursor = servers.nextPageCursor
-            if not nextCursor then
-                warn("No more servers to hop to.")
-                break  -- Stop if no more servers are available
-            end
+            nextCursor = serverData.nextPageCursor
+            if not nextCursor then break end  -- Exit if no more servers
         else
-            warn("No valid servers found or failed to retrieve server list.")
-            break  -- Break the loop if no servers are found or if the API call failed
+            warn("Failed to retrieve server list or no servers available.")
+            break
         end
     end
 end
@@ -78,70 +65,66 @@ end
 -- Robbery items to look for
 local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
 
--- Function to handle teleporting to a robbery object
-local function tweenToPosition(pos, speed)
+-- Function to move to a robbery object
+local function moveToPosition(pos, speed)
     local hrp = Player.Character:WaitForChild("HumanoidRootPart")
     local distance = (hrp.Position - pos).Magnitude
-    local tweenInfo = TweenInfo.new(distance / speed)
-
-    local tween = TweenService:Create(hrp, tweenInfo, {Position = pos})
+    local tween = TweenService:Create(hrp, TweenInfo.new(distance / speed), {Position = pos})
     tween:Play()
     tween.Completed:Wait()
 end
 
--- Function to steal from the closest available robbery
+-- Optimized robbery function
 local function attemptRobbery()
     local hrp = Player.Character:WaitForChild("HumanoidRootPart")
-    local closestRobbery, closestDistance = nil, math.huge
+    local closest, closestDistance = nil, math.huge
 
-    -- Find closest valid robbery
+    -- Find the closest robbery object
     for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and not object:FindFirstChild("Nope") and object:IsDescendantOf(workspace) then
-            local objectPosition = object:GetPivot().Position
-            local distance = (hrp.Position - objectPosition).Magnitude
+        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
+            local objPos = object:GetPivot().Position
+            local distance = (hrp.Position - objPos).Magnitude
             if distance < closestDistance then
+                closest = object
                 closestDistance = distance
-                closestRobbery = object
             end
         end
     end
 
-    if closestRobbery then
-        local robberyPos = closestRobbery:GetPivot().Position
-        local event = closestRobbery:FindFirstChildWhichIsA("RemoteEvent", true)
+    if closest then
+        local event = closest:FindFirstChildWhichIsA("RemoteEvent", true)
+        if event then
+            moveToPosition(closest:GetPivot().Position, flyspeed)
+            
+            -- Adding a check to ensure the object and event are valid
+            task.wait(0.2) -- Give slight delay after moving
 
-        -- Validate robbery object and position
-        if robberyPos and event then
-            -- Move to robbery and steal
-            tweenToPosition(robberyPos, flyspeed)
-            event:FireServer()
-            print("Stolen from: " .. closestRobbery.Name)
+            event:FireServer()  -- Trigger the robbery event
+            print("Stolen from: " .. closest.Name)
         else
-            warn("Failed to teleport or find event for: " .. closestRobbery.Name)
+            warn("No RemoteEvent found for: " .. closest.Name)
         end
     else
-        warn("No valid robbery found.")
+        warn("No valid robbery object found.")
     end
 end
 
--- Function to clean unnecessary parts from the game world
+-- Cleanup unnecessary parts from the game world
 local function cleanGameWorld()
-    local IgnoreFolder = workspace:WaitForChild("Ignore")
-    IgnoreFolder:WaitForChild("ComputerStore"):WaitForChild("Lasers"):Destroy()
-    IgnoreFolder:WaitForChild("JewelryStore"):WaitForChild("Jewlery"):WaitForChild("Lasers"):Destroy()
-
-    for _, obj in pairs(IgnoreFolder.WorldObjects:GetChildren()) do
-        if obj.Name == "Lasers" then
-            obj:Destroy()
+    local IgnoreFolder = workspace:FindFirstChild("Ignore")
+    if IgnoreFolder then
+        for _, obj in pairs(IgnoreFolder:GetDescendants()) do
+            if obj.Name == "Lasers" then
+                obj:Destroy()
+            end
         end
     end
 end
 
--- Initial setup and cleanup
+-- Initial setup
 task.spawn(function()
-    -- Check if the player has been in-game for more than 30 seconds
-    task.wait(30)
-    serverHop()  -- Hop to another server after 30 seconds
+    task.wait(30)  -- Wait 30 seconds before attempting to hop
+    serverHop()
 end)
 
 task.wait(getgenv().TimeToLoad or 5)
@@ -149,10 +132,10 @@ task.wait(getgenv().TimeToLoad or 5)
 -- Clean the game world
 cleanGameWorld()
 
--- Robbery loop
+-- Robbery loop with optimized timing
 task.spawn(function()
     while true do
         attemptRobbery()
-        task.wait(0.5)  -- Increased wait time to reduce spamming the robbery event
+        task.wait(0.5)  -- Adjusted wait to avoid excessive firing
     end
 end)
