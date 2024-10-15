@@ -1,59 +1,80 @@
--- Variables
-local Players = game:GetService("Players")
+-- Wait until the game is fully loaded
+task.wait()
 
--- Function to create an HP bar for a player
-local function createHealthBar(character)
-    -- Check if the player already has a health bar
-    if character:FindFirstChild("HealthBarGui") then return end
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local RunService = game:GetService("RunService")
+local PlayerService = game:GetService("Players")
+local Player = PlayerService.LocalPlayer
 
-    -- Create BillboardGui
-    local billboardGui = Instance.new("BillboardGui")
-    billboardGui.Name = "HealthBarGui"
-    billboardGui.Size = UDim2.new(5, 0, 1, 0) -- Adjust size (width and height)
-    billboardGui.StudsOffset = Vector3.new(2, 3, 0) -- Position it to the side of the player
-    billboardGui.Adornee = character:WaitForChild("HumanoidRootPart") -- Attach to player's root part
-    billboardGui.AlwaysOnTop = true -- Ensure visibility through walls
-    billboardGui.Parent = character
-    
-    -- Create background frame for the health bar
-    local bgFrame = Instance.new("Frame")
-    bgFrame.Size = UDim2.new(1, 0, 0.2, 0) -- Height and width of the bar background
-    bgFrame.Position = UDim2.new(0, 0, 0.5, 0)
-    bgFrame.BackgroundColor3 = Color3.new(0, 0, 0) -- Black background
-    bgFrame.BorderSizePixel = 0
-    bgFrame.Parent = billboardGui
+local flyspeed = getgenv().FlySpeed or 50
+local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
+local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
+local teleportRetries = 3 -- Retry teleportation 3 times if it fails
 
-    -- Create health bar frame
-    local healthBar = Instance.new("Frame")
-    healthBar.Name = "HealthBar"
-    healthBar.Size = UDim2.new(1, 0, 1, 0) -- Initial full size
-    healthBar.BackgroundColor3 = Color3.new(0, 1, 0) -- Green color
-    healthBar.BorderSizePixel = 0
-    healthBar.Parent = bgFrame
+-- Robbery items to look for
+local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
 
-    -- Create a function to update health
-    local function updateHealth()
-        local humanoid = character:WaitForChild("Humanoid")
-        local healthPercentage = humanoid.Health / humanoid.MaxHealth
-        healthBar.Size = UDim2.new(healthPercentage, 0, 1, 0) -- Resize based on health percentage
-    end
+-- Function to create ESP for a target
+local function createESP(object, color)
+    -- Create ESP UI objects
+    local Billboard = Instance.new("BillboardGui")
+    local Frame = Instance.new("Frame")
 
-    -- Update the health bar when the player's health changes
-    local humanoid = character:WaitForChild("Humanoid")
-    humanoid.HealthChanged:Connect(updateHealth)
-    updateHealth() -- Initial update when the player spawns
+    -- BillboardGui settings
+    Billboard.Name = "ESP"
+    Billboard.Adornee = object
+    Billboard.AlwaysOnTop = true
+    Billboard.Size = UDim2.new(0, 200, 0, 50)
+    Billboard.StudsOffset = Vector3.new(0, 2, 0)
+
+    -- Frame settings
+    Frame.Size = UDim2.new(1, 0, 1, 0)
+    Frame.BackgroundTransparency = 0.5
+    Frame.BackgroundColor3 = color
+    Frame.BorderSizePixel = 0
+
+    -- Parent UI elements
+    Frame.Parent = Billboard
+    Billboard.Parent = object
 end
 
--- Apply health bars to all players
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function(character)
-        createHealthBar(character)
-    end)
+-- Function to add ESP to all players
+local function addPlayerESP()
+    for _, v in pairs(PlayerService:GetPlayers()) do
+        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+            createESP(v.Character.HumanoidRootPart, Color3.fromRGB(255, 0, 0))  -- Red for players
+        end
+    end
+end
+
+-- Function to add ESP to robbery objects
+local function addRobberyESP()
+    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
+        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
+            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
+        end
+    end
+end
+
+-- Run ESP updates continuously
+local function updateESP()
+    -- Remove old ESPs
+    for _, v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BillboardGui") and v.Name == "ESP" then
+            v:Destroy()
+        end
+    end
+
+    -- Add new ESPs
+    addPlayerESP()
+    addRobberyESP()
+end
+
+-- Connect the update function to every frame
+RunService.RenderStepped:Connect(function()
+    updateESP()
 end)
 
--- For existing players
-for _, player in pairs(Players:GetPlayers()) do
-    if player.Character then
-        createHealthBar(player.Character)
-    end
-end
+-- Rest of your original code...
