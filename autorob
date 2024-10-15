@@ -7,51 +7,39 @@ local TeleportService = game:GetService("TeleportService")
 local Player = game.Players.LocalPlayer
 
 local flyspeed = getgenv().FlySpeed or 50
-local retryLimit = 5  -- Retry limit for server hop
 local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
 local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
 
--- Function to retrieve the list of available servers
+-- Function to retrieve server list
 local function getServerList(cursor)
     local placeId = game.PlaceId
     local apiUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Desc&limit=100"
     if cursor then apiUrl = apiUrl .. "&cursor=" .. cursor end
 
-    for attempt = 1, retryLimit do
-        local success, response = pcall(function()
-            return game:HttpGet(apiUrl)
-        end)
-        
-        if success then
-            local decodedResponse = HttpService:JSONDecode(response)
-            if decodedResponse and decodedResponse.data and #decodedResponse.data > 0 then
-                return decodedResponse  -- Valid response with server data
-            else
-                warn("No servers found, retrying... (Attempt " .. attempt .. ")")
-            end
-        else
-            warn("Failed to retrieve server list (Attempt " .. attempt .. "): " .. response)
-        end
-        task.wait(3)  -- Wait before retrying
-    end
+    local success, response = pcall(function()
+        return game:HttpGet(apiUrl)
+    end)
 
-    return nil  -- Return nil if all attempts fail
+    if success then
+        local decodedResponse = HttpService:JSONDecode(response)
+        return decodedResponse
+    else
+        warn("Failed to retrieve server list.")
+        return nil
+    end
 end
 
--- Enhanced server hopping function
+-- Simplified server hopping function
 local function serverHop()
     local placeId, jobId = game.PlaceId, game.JobId
     local nextCursor = nil
-    local retryCount = 0
 
-    while retryCount < retryLimit do
+    while true do
         local servers = getServerList(nextCursor)
-
         if servers and servers.data then
             for _, server in pairs(servers.data) do
                 -- Check if the server has a valid player count and is not the current server
                 if server.playing >= minPlayers and server.playing <= maxPlayers and server.id ~= jobId then
-                    -- Attempt to teleport to the selected server
                     local success, result = pcall(function()
                         return TeleportService:TeleportToPlaceInstance(placeId, server.id, Player)
                     end)
@@ -64,19 +52,15 @@ local function serverHop()
                 end
             end
             nextCursor = servers.nextPageCursor
+            if not nextCursor then
+                warn("No more servers to hop to.")
+                break
+            end
         else
-            retryCount = retryCount + 1
-            warn("No valid servers found, retrying... (Retry " .. retryCount .. "/" .. retryLimit .. ")")
-            task.wait(5)  -- Increase wait time before retrying
-        end
-
-        if not nextCursor then
-            print("No more servers to hop to.")
-            break  -- Exit if no more servers are available
+            warn("No valid servers found.")
+            break
         end
     end
-
-    warn("Server hop failed after " .. retryLimit .. " retries.")
 end
 
 -- Robbery items to look for
@@ -160,10 +144,10 @@ task.spawn(function()
     end
 end)
 
--- Server hopping loop every 30 seconds
+-- Server hopping loop every 60 seconds
 task.spawn(function()
     while true do
-        task.wait(30)
-        serverHop()  -- Try to hop every 30 seconds
+        task.wait(60)
+        serverHop()  -- Try to hop every 60 seconds
     end
 end)
