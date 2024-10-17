@@ -1,80 +1,141 @@
--- Wait until the game is fully loaded
-task.wait()
+repeat wait() until game:IsLoaded()
+repeat wait() until game.Players.LocalPlayer.Character
+repeat wait() until game.Players.LocalPlayer.Character:FindFirstChild("Humanoid")
+repeat wait() until game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
-local PlayerService = game:GetService("Players")
-local Player = PlayerService.LocalPlayer
+wait(2)
 
-local flyspeed = getgenv().FlySpeed or 50
-local minPlayers = getgenv().ServerHop and getgenv().ServerHop.min or 5
-local maxPlayers = getgenv().ServerHop and getgenv().ServerHop.max or 25
-local teleportRetries = 3 -- Retry teleportation 3 times if it fails
+if _G.AutoRob == true then warn("Auto Rob already loaded.") return nil end
 
--- Robbery items to look for
-local MiniRobberies = {"Cash", "CashRegister", "DiamondBox", "Laptop", "Phone", "Luggage", "ATM", "TV", "Safe"}
+_G.AutoRob = true
+queue_on_teleport("loadstring(game:HttpGet('https://raw.githubusercontent.com/NtReadVirtualMemory/Open-Source-Scripts/refs/heads/main/Mad%20City%20Chapter%201/Auto%20Rob.lua'))()")
 
--- Function to create ESP for a target
-local function createESP(object, color)
-    -- Create ESP UI objects
-    local Billboard = Instance.new("BillboardGui")
-    local Frame = Instance.new("Frame")
-
-    -- BillboardGui settings
-    Billboard.Name = "ESP"
-    Billboard.Adornee = object
-    Billboard.AlwaysOnTop = true
-    Billboard.Size = UDim2.new(0, 200, 0, 50)
-    Billboard.StudsOffset = Vector3.new(0, 2, 0)
-
-    -- Frame settings
-    Frame.Size = UDim2.new(1, 0, 1, 0)
-    Frame.BackgroundTransparency = 0.5
-    Frame.BackgroundColor3 = color
-    Frame.BorderSizePixel = 0
-
-    -- Parent UI elements
-    Frame.Parent = Billboard
-    Billboard.Parent = object
+for i = 1, 100 do
+   print("Made by NtOpenProcess and deni210 (on dc)")
 end
 
--- Function to add ESP to all players
-local function addPlayerESP()
-    for _, v in pairs(PlayerService:GetPlayers()) do
-        if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
-            createESP(v.Character.HumanoidRootPart, Color3.fromRGB(255, 0, 0))  -- Red for players
+function shop()
+    local a,b = pcall(function()
+
+        local servers = {}
+        local req = request({Url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true"})
+        local body = game:GetService("HttpService"):JSONDecode(req.Body)
+    
+        if body and body.data then
+            for i, v in next, body.data do
+                if type(v) == "table" and tonumber(v.playing) and tonumber(v.maxPlayers) and v.playing < v.maxPlayers and v.id ~= game.JobId then
+                    table.insert(servers, 1, v.id)
+                end
+            end
         end
-    end
-end
-
--- Function to add ESP to robbery objects
-local function addRobberyESP()
-    for _, object in pairs(workspace.ObjectSelection:GetChildren()) do
-        if table.find(MiniRobberies, object.Name) and object:IsDescendantOf(workspace) then
-            createESP(object, Color3.fromRGB(0, 255, 0))  -- Green for robbery targets
+    
+        print(#servers)
+        if #servers > 0 then
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], game.Players.LocalPlayer)
+        else
+            if #game.Players:GetChildren() <= 1 then
+                Players.LocalPlayer:Kick("\nRejoining...")
+                wait()
+                game:GetService("TeleportService"):Teleport(game.PlaceId, game.Players.LocalPlayer)
+            else
+                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+            end
         end
-    end
-end
+    
+    end)
+    
+    print(a,b)
 
--- Run ESP updates continuously
-local function updateESP()
-    -- Remove old ESPs
-    for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BillboardGui") and v.Name == "ESP" then
-            v:Destroy()
+    if not a then
+        shop()
+    end 
+
+    task.spawn(function()
+        while wait(5) do
+            shop()
         end
-    end
-
-    -- Add new ESPs
-    addPlayerESP()
-    addRobberyESP()
+    end)
 end
 
--- Connect the update function to every frame
-RunService.RenderStepped:Connect(function()
-    updateESP()
+wait(1)
+
+game.Players.LocalPlayer.Character:FindFirstChild("Humanoid").Died:Connect(function()
+    shop()
 end)
 
--- Rest of your original code...
+if game.Players.LocalPlayer.PlayerGui.MainGUI:FindFirstChild("TeleportEffect") then
+	game.Players.LocalPlayer.PlayerGui.MainGUI.TeleportEffect:Destroy()
+end
+
+-- Function for teleporting (without targeting the Pyramid)
+local function tp(x, y, z)
+    -- Remove or skip Pyramid-specific code
+    -- This part originally teleports to the Pyramid, which we don't want anymore
+    -- So the core Pyramid teleport code has been removed
+
+    -- Still allow teleport to other coordinates
+    for i = 1, 45 do
+        Game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(x, y, z)
+        task.wait()
+    end
+end
+
+-- Define the mini robberies
+local MiniRobberies = {
+    "Cash",
+    "CashRegister",
+    "DiamondBox",
+    "Laptop",
+    "Phone",
+    "Luggage",
+    "ATM",
+    "TV",
+    "Safe"
+}
+
+local function getevent(v)
+	for i, v in next, v:GetDescendants() do
+		if not v:IsA("RemoteEvent") then continue end
+		return v
+	end
+end
+
+local function getrobbery()
+    for i, v in next, workspace.ObjectSelection:GetChildren() do
+		if not table.find(MiniRobberies, v.Name) then continue end
+		if v:FindFirstChild("Nope") then continue end
+		if not getevent(v) then continue end
+		return v
+    end
+end
+
+-- Rob jewelry store (without Pyramid)
+tp(-82, 86, 807)
+task.wait(0.5)
+for i, v in pairs(workspace.JewelryStore.JewelryBoxes:GetChildren()) do
+    task.spawn(function()
+        for i = 1, 5 do
+            workspace.JewelryStore.JewelryBoxes.JewelryManager.Event:FireServer(v)
+        end
+    end)
+end
+
+task.wait(2)
+tp(2115, 26, 420)
+task.wait(1)
+
+-- Continuously check for other mini robberies
+repeat
+	local robbery = getrobbery()
+	if robbery then
+		for i = 1, 20 do
+			game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(robbery:GetPivot().Position.x, robbery:GetPivot().Position.y + 5, robbery:GetPivot().Position.z)
+			getevent(robbery):FireServer()
+			task.wait()
+		end
+	end
+until getrobbery() == nil
+
+task.wait(1)
+
+shop()
